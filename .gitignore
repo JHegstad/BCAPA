@@ -1,0 +1,9 @@
+.claude/
+*.stderr
+subsampled_reads/
+assemblies/
+autocycler_out/
+BCAPA_OUT/
+*_bcapa/
+*.fastq
+*.fastq.gz
