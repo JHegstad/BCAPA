@@ -8,13 +8,18 @@
 # contigs through Autocycler's compress/cluster/trim/resolve/combine steps to
 # produce one consensus assembly.
 #
-# Assembler precedence (see the weight-tagging block below):
-#   - Chromosome: Flye is the only assembler that outputs a chromosome-sized
-#     contig here (Plassembler's helper output is plasmid-only), so Flye is
-#     the chromosome's consensus authority by default.
-#   - Plasmids: Plassembler contigs are given a higher Autocycler consensus
-#     weight than Flye's, so Plassembler's plasmid calls take precedence over
-#     Flye's whenever both assemblers reconstruct the same plasmid.
+# Assembler precedence:
+#   - Chromosome: only Flye's largest contig per subsample is kept (see the
+#     chromosome-filtering block below); all of Flye's smaller contigs
+#     (incompletely/inaccurately assembled plasmids) are discarded before
+#     compress ever sees them.
+#   - Plasmids: Plassembler's helper output is plasmid-only, and is now the
+#     sole source of plasmid contigs (Flye's plasmid attempts are discarded),
+#     so every plasmid cluster is Plassembler-only.
+#   Since Flye and Plassembler no longer contribute to the same cluster, no
+#   cross-assembler consensus-weight tie-break is needed; Plassembler contigs
+#   still get a cluster_weight bump so a plasmid found in only 1-2 of the 4
+#   subsamples still clears Autocycler's QC threshold.
 #
 # Usage:
 #   bcapa.sh <read_fastq> <threads> <jobs> [read_type]
@@ -39,8 +44,8 @@
 #   `autocycler table`, as used in bcapa_pipeline.sh).
 #
 # Based on Ryan Wick's Autocycler example assembly script, trimmed down to
-# just the flye/plassembler assembler pair and given asymmetric consensus
-# weights per assembler.
+# just the flye/plassembler assembler pair, with Flye restricted to its
+# chromosome contig and Plassembler as the sole plasmid source.
 #
 # Copyright 2025 Ryan Wick (rrwick@gmail.com)
 # Licensed under the GNU General Public License v3.
@@ -96,23 +101,39 @@ set +e
 nice -n 19 parallel --jobs "$jobs" --joblog assemblies/joblog.tsv --results assemblies/logs --timeout "$max_time" < assemblies/jobs.txt
 set -e
 
-# Give all Plassembler plasmid contigs (circular or linear) extra clustering
-# weight, so a plasmid found only by Plassembler still passes QC, and a
-# consensus weight higher than Flye's, so Plassembler takes precedence for
-# plasmids. Applied unconditionally per contig (not just circular ones): Plassembler's
-# own header format is inconsistent about "circular=True" vs "circular=true",
-# and linear contigs carry no circular= tag at all.
+# Keep only the chromosome from each Flye assembly: Flye reliably assembles
+# the chromosome but not all plasmids, so its smaller contigs (incomplete or
+# spurious plasmid attempts) are discarded here, keeping only the single
+# largest contig (the chromosome). Plassembler's dedicated plasmid contigs
+# are the sole plasmid source from here on. Done as a direct FASTA filter
+# rather than via `autocycler clean`/`gfa2fasta`, since the .gfa that Flye's
+# helper produces is Flye's own raw assembly graph (segments are graph edges,
+# not final contigs), not an Autocycler unitig graph those commands expect.
 shopt -s nullglob
-for f in assemblies/plassembler*.fasta; do
-    sed -i 's/^>.*$/& Autocycler_cluster_weight=3 Autocycler_consensus_weight=3/' "$f"
+for f in assemblies/flye_*.fasta; do
+    awk '
+        /^>/ {
+            if (name != "" && length(seq) > best_len) { best_len = length(seq); best_name = name; best_seq = seq }
+            name = $0; seq = ""
+            next
+        }
+        { seq = seq $0 }
+        END {
+            if (name != "" && length(seq) > best_len) { best_len = length(seq); best_name = name; best_seq = seq }
+            print best_name
+            print best_seq
+        }
+    ' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
 done
 
-# Give Flye (and Canu) contigs a consensus weight so Flye is the chromosome
-# authority. Plassembler only outputs plasmid contigs, so Flye is the sole
-# source of the chromosome and wins it by default; its weight of 2 here is
-# below Plassembler's 3 above, so Plassembler still wins on plasmids.
-for f in assemblies/canu*.fasta assemblies/flye*.fasta; do
-    sed -i 's/^>.*$/& Autocycler_consensus_weight=2/' "$f"
+# Give Plassembler plasmid contigs (circular or linear) extra clustering
+# weight, so a plasmid found in only some of the 4 subsamples still passes
+# Autocycler's QC threshold. Applied unconditionally per contig, not just
+# circular ones: Plassembler's own header format is inconsistent about
+# "circular=True" vs "circular=true", and linear contigs carry no circular=
+# tag at all.
+for f in assemblies/plassembler*.fasta; do
+    sed -i 's/^>.*$/& Autocycler_cluster_weight=3/' "$f"
 done
 shopt -u nullglob
 

@@ -12,40 +12,44 @@ Both assemblers are run on several subsampled read sets, and their contigs
 are combined through Autocycler's compress/cluster/trim/resolve/combine
 pipeline into a single consensus assembly per sample.
 
-## Why two assemblers with asymmetric weights
+## Why two assemblers, each restricted to its strength
 
-Autocycler builds its consensus sequence per replicon (chromosome, each
-plasmid) from a weighted vote across all contigs that cluster together. Flye
-is a reliable whole-genome assembler but can struggle to fully resolve small
-or low-copy plasmids; Plassembler is built specifically for plasmid recovery
-and is usually more accurate there, but doesn't assemble the chromosome at
-all (its Autocycler helper output is plasmid-only).
+Flye reliably assembles the chromosome but not always every plasmid;
+Plassembler is built specifically for plasmid recovery and is usually more
+accurate there, but doesn't assemble the chromosome at all (its Autocycler
+helper output is plasmid-only). Rather than let both assemblers compete for
+the same replicon in Autocycler's consensus vote, `bcapa.sh` gives each
+assembler exclusive ownership of what it's good at:
 
-`bcapa.sh` tags each assembler's contigs with an
-[`Autocycler_consensus_weight`](https://github.com/rrwick/Autocycler/wiki/Influencing-Autocycler-via-contig-headers)
-so that:
+- **Chromosome**: after Flye assembles each subsampled read set, `bcapa.sh`
+  keeps only Flye's single largest contig and discards the rest (Flye's
+  smaller contigs are typically incomplete or spurious plasmid attempts).
+  Only Flye's chromosome contig reaches Autocycler.
+- **Plasmids**: Plassembler's output is plasmid-only, so once Flye's plasmid
+  attempts are discarded, Plassembler is the sole plasmid contributor to
+  every plasmid cluster.
 
-- Flye contigs get `Autocycler_consensus_weight=2`. Since Plassembler never
-  outputs a chromosome-sized contig, Flye is the chromosome's only
-  contributor and wins it by default.
-- Plassembler contigs get `Autocycler_consensus_weight=3` (plus
-  `Autocycler_cluster_weight=3`, so a plasmid found only by Plassembler still
-  passes Autocycler's QC threshold). This weight beats Flye's, so
-  Plassembler's plasmid sequence takes precedence whenever both assemblers
-  reconstruct the same plasmid.
+Because Flye and Plassembler no longer land in the same Autocycler cluster,
+no consensus-weight tie-break between them is needed. Plassembler contigs
+still get an
+[`Autocycler_cluster_weight=3`](https://github.com/rrwick/Autocycler/wiki/Influencing-Autocycler-via-contig-headers)
+tag, applied to every Plassembler contig (circular or linear), so a plasmid
+found in only 1-2 of the 4 subsamples still clears Autocycler's QC threshold.
 
-The weight is applied to every Plassembler contig regardless of whether it's
-circular or linear — Plassembler's own output is inconsistent about how it
-tags circular contigs (`circular=True` vs `circular=true`, and linear contigs
-carry no `circular=` tag at all), so matching on that text isn't reliable.
+The chromosome filter is a direct FASTA filter (keep the longest contig per
+`flye_*.fasta`), not `autocycler clean`/`gfa2fasta`: the `.gfa` that
+Autocycler's Flye helper produces is Flye's own raw assembly graph (segments
+are graph edges, not final contigs), not an Autocycler unitig graph, so it
+doesn't cleanly map onto "remove this contig".
 
 ## Scripts
 
 ### `bcapa.sh`
 
 Runs the full single-sample assembly: subsample reads, assemble with Flye and
-Plassembler, apply the weight tags above, then compress/cluster/trim/resolve/
-combine via Autocycler.
+Plassembler, restrict Flye to its chromosome contig and tag Plassembler's
+contigs as described above, then compress/cluster/trim/resolve/combine via
+Autocycler.
 
 ```
 bcapa.sh <read_fastq> <threads> <jobs> [read_type]
