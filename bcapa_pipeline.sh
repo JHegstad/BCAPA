@@ -31,6 +31,10 @@
 #     links so they're visible in Bandage / other topology tools)
 # If HAIRPIN_TOOLS_DIR isn't found, this step is skipped with a warning.
 #
+# Finally, a Bandage image of each sample's consensus assembly graph is
+# rendered (Bandage on PATH required; see https://github.com/rrwick/Bandage).
+# Skipped with a warning if Bandage isn't found.
+#
 # Output:
 #   ./BCAPA_OUT/<sample>_bcapa/autocycler_out/  - per-sample assembly, as
 #     produced by bcapa.sh; consensus_topology.txt/.tsv are added here by the
@@ -41,6 +45,8 @@
 #     hairpin/topology QC step, if it runs.
 #   ./BCAPA_OUT/metrics.tsv - one row per sample of Autocycler's summary
 #     stats (see `autocycler table --help` for the field list).
+#   ./BCAPA_OUT/<sample>_consensus_graph.png - Bandage rendering of that
+#     sample's consensus_assembly.gfa.
 #
 # Joachim Hegstad 03.07.26
 for i in *.fastq.gz
@@ -78,4 +84,14 @@ if [[ -f "$HAIRPIN_TOOLS_DIR/autocycler_dotplot_classify.py" ]]; then
     done
 else
     echo "Warning: HAIRPIN_TOOLS_DIR ('$HAIRPIN_TOOLS_DIR') not found; skipping hairpin/topology QC." 1>&2
+fi
+
+# Render a Bandage image of each sample's consensus assembly graph.
+if command -v Bandage >/dev/null 2>&1; then
+    for sample in *_bcapa; do
+        name="${sample%_bcapa}"
+        QT_QPA_PLATFORM=offscreen Bandage image "$sample/autocycler_out/consensus_assembly.gfa" "${name}_consensus_graph.png"
+    done
+else
+    echo "Warning: Bandage not found on PATH; skipping consensus graph images." 1>&2
 fi

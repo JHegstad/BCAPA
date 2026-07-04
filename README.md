@@ -108,12 +108,19 @@ pass per sample after `metrics.tsv` is built:
 If `HAIRPIN_TOOLS_DIR` isn't found, this step is skipped with a warning
 rather than failing the pipeline.
 
+Finally, `bcapa_pipeline.sh` renders a [Bandage](https://github.com/rrwick/Bandage)
+image of each sample's `consensus_assembly.gfa` as
+`BCAPA_OUT/<sample>_consensus_graph.png` (via `Bandage image`, run headless
+using `QT_QPA_PLATFORM=offscreen`). Skipped with a warning if Bandage isn't
+on `PATH`.
+
 ## Requirements
 
 - [Autocycler](https://github.com/rrwick/Autocycler) v0.6+
 - Flye
 - Plassembler
 - GNU `parallel`
+- [Bandage](https://github.com/rrwick/Bandage) (for `bcapa_pipeline.sh`'s consensus graph images)
 
 All of the above on `PATH` — developed against a conda environment named
 `autocycler`.
