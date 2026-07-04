@@ -1,4 +1,8 @@
-# BCAPA — Bacterial Chromosome And Plasmid Assembler
+<p align="center">
+  <img src="BCAPA_logo.png" alt="BCAPA logo" width="600">
+  <br>
+  <strong>Bacterial Chromosome And Plasmid Assembler</strong>
+</p>
 
 BCAPA is a thin wrapper around [Autocycler](https://github.com/rrwick/Autocycler)
 that restricts the assembler ensemble to two long-read assemblers:
