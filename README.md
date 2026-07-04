@@ -83,6 +83,27 @@ call; edit the script to change them. Output is collected under
 `BCAPA_OUT/<sample>_bcapa/` per sample, with a combined `BCAPA_OUT/metrics.tsv`
 (via `autocycler table`).
 
+If `HAIRPIN_TOOLS_DIR` (default: `~/linear-plasmid-hairpin-tools`) contains
+[linear-plasmid-hairpin-tools](https://github.com/JHegstad/linear-plasmid-hairpin-tools)'s
+`autocycler_dotplot_classify.py`, `find_hairpins.py` and
+`add_hairpin_edges.py`, `bcapa_pipeline.sh` also runs a hairpin/topology QC
+pass per sample after `metrics.tsv` is built:
+
+- `autocycler_dotplot_classify.py --consensus` classifies each replicon in
+  the final consensus assembly as circular/linear/fragmented, writing
+  `consensus_topology.txt`/`.tsv` into that sample's `autocycler_out/`.
+- `find_hairpins.py --extract-hairpins` flags which raw Flye/Plassembler
+  contigs form a terminal hairpin (a common artifact of linear plasmids),
+  writing `hairpin_report.*` and `hairpin_contigs.fasta` into that sample's
+  `assemblies/`.
+- `add_hairpin_edges.py --overlap` annotates the raw per-assembler GFAs with
+  the detected hairpin links, writing `*.hairpins.gfa` (+ `hairpin_edges.tsv`,
+  `hairpin_summary.tsv`) into that sample's `assemblies/`, so the hairpins are
+  visible in Bandage.
+
+If `HAIRPIN_TOOLS_DIR` isn't found, this step is skipped with a warning
+rather than failing the pipeline.
+
 ## Requirements
 
 - [Autocycler](https://github.com/rrwick/Autocycler) v0.6+
